@@ -1,0 +1,12 @@
+{
+    "name": "network-insight",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "cd frontend && npm run dev",
+        "install:all": "cd frontend && npm install"
+    },
+    "devDependencies": {
+        "wrangler": "^4.54.0"
+    }
+}

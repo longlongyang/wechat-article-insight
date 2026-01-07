@@ -1,0 +1,66 @@
+name: wechat-article-insight
+
+services:
+  # PostgreSQL + pgvector
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: insight-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wechat_insights
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Rust 后端
+  backend:
+    image: wechat-article-insight-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insight-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/wechat_insights
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
+      # Proxy for accessing overseas services (Cloudflare Workers, Gemini API)
+      # Must use host.docker.internal to access host machine's proxy from container
+      HTTPS_PROXY: http://host.docker.internal:7890
+      # Exclude WeChat domains from proxy to improve speed
+      NO_PROXY: localhost,127.0.0.1,mp.weixin.qq.com,weixin.qq.com,res.wx.qq.com,api.deepseek.com,mmbiz.qpic.cn
+      RUST_LOG: info
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./exports:/app/exports
+
+  # Nuxt 前端
+  frontend:
+    image: wechat-article-insight-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: insight-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NUXT_RUST_BACKEND_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
